@@ -1,143 +1,253 @@
-# front-final-2026
+# back-final-2026
 
-Frontend del trabajo final 2026. Está hecho con React 19, TypeScript y Vite. Consume la API del repositorio `back-final-2026`.
+API REST del trabajo final 2026. Está hecha con Node.js, Express 5, TypeScript, Sequelize y PostgreSQL.
 
-Esta guía permite levantar el frontend desde cero. Hay dos formas:
+Esta guía permite levantar el backend desde cero. Hay dos formas:
 
-- **Opción A: modo desarrollo** (Vite).
-- **Opción B: Docker** (build estático servido con Nginx).
+- **Opción A: Docker** (recomendada). Levanta la API y la base de datos juntas.
+- **Opción B: modo desarrollo**. Corre la API con Node.js en tu máquina y necesita una base PostgreSQL.
 
-> **Antes de empezar:** el backend tiene que estar levantado. Seguí el README de `back-final-2026` y anotá la URL donde queda disponible (por ejemplo `http://localhost:3000`).
+Las dos opciones empiezan con los pasos 1 y 2.
 
 ---
 
 ## 1. Requisitos
 
-| Herramienta | Opción A (desarrollo) | Opción B (Docker) |
+| Herramienta | Opción A (Docker) | Opción B (desarrollo) |
 |---|---|---|
 | Git | Sí | Sí |
-| Node.js 22 o superior y npm | Sí | No |
-| Docker | No | Sí |
+| Docker + Docker Compose v2 | Sí | Solo para la base de datos (ver 4.B.2) |
+| Node.js 20 o superior y npm | No | Sí |
+| PostgreSQL 17 | No | Solo si no usás Docker para la base |
 
-## 2. Clonar el repositorio
+Una cuenta de correo con acceso SMTP es necesaria en ambos casos (ver paso 2).
+
+## 2. Clonar y configurar las variables de entorno
 
 ```bash
-git clone https://github.com/ricardoherbas/frontend-f-2026.git front-final-2026
-cd front-final-2026
+git clone https://github.com/ricardoherbas/backend-f-2026.git back-final-2026
+cd back-final-2026
+cp .env.example .env
 ```
 
-## 3. Variable de entorno `VITE_API_URL`
+Abrí `.env` y completá **todas** las variables de la tabla.
 
 | Variable | Obligatoria | Descripción |
 |---|---|---|
-| `VITE_API_URL` | Sí (ver nota) | **URL donde está corriendo el backend**, sin `/api` al final. El frontend le agrega `/api` automáticamente. |
+| `PORT` | No | Puerto de la API. Por defecto `3000`. |
+| `DB_HOST` | Sí | Host de PostgreSQL. **Con Docker se ignora** (compose usa el servicio `db`). En modo desarrollo usá `localhost`. |
+| `DB_PORT` | Sí | Puerto de PostgreSQL. Normalmente `5432`. |
+| `DB_NAME` | Sí | Nombre de la base de datos. Con Docker se crea con este nombre. |
+| `DB_USER` | Sí | Usuario de la base. Con Docker se crea con este nombre. |
+| `DB_PASSWORD` | Sí | Contraseña de la base. Con Docker se crea con esta contraseña. |
+| `JWT_SECRET` | Sí | Secreto para firmar los tokens de sesión. Usá una cadena larga y aleatoria. |
+| `ADMIN_NOMBRE` | Sí | Nombre del administrador inicial. |
+| `ADMIN_APELLIDO` | Sí | Apellido del administrador inicial. |
+| `ADMIN_DNI` | Sí | DNI del administrador inicial. |
+| `ADMIN_FECHA_NACIMIENTO` | No | Formato `AAAA-MM-DD`. |
+| `ADMIN_TELEFONO` | No | Teléfono del administrador. |
+| `ADMIN_EMAIL` | Sí | **Email con el que el administrador inicia sesión.** |
+| `ADMIN_PASSWORD` | Sí | **Contraseña con la que el administrador inicia sesión.** |
+| `SMTP_HOST` | Sí | Servidor SMTP (se usa para el correo de recuperación de contraseña). |
+| `SMTP_PORT` | Sí | Puerto SMTP. `587` por defecto; con `465` se usa conexión segura. |
+| `SMTP_USER` | Sí | Usuario SMTP. También es el remitente de los correos. |
+| `SMTP_PASSWORD` | Sí | Contraseña SMTP. |
+| `FRONTEND_URL` | Sí | URL donde corre el frontend, por ejemplo `http://localhost:5173`. Se usa para armar el enlace de recuperación de contraseña. |
 
-**`VITE_API_URL` debe apuntar a la URL donde esté corriendo el backend.** Esa URL se abre desde el navegador de quien usa la aplicación, así que tiene que ser accesible desde ese navegador.
+> **Importante: las variables SMTP no se pueden dejar vacías.** El backend se detiene al arrancar con el error `Faltan variables de configuración SMTP`.
+> Si solo querés probar el sistema sin enviar correos, poné valores cualquiera (por ejemplo `SMTP_HOST=localhost`, `SMTP_USER=test`, `SMTP_PASSWORD=test`). En ese caso la recuperación de contraseña no va a enviar correos.
 
-Ejemplos:
+Ejemplo mínimo para una prueba local (cambiá las contraseñas y el secreto):
 
-| Dónde corre el backend | Valor de `VITE_API_URL` |
+```env
+PORT=3000
+
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=back_final
+DB_USER=postgres
+DB_PASSWORD=cambiar_esta_clave
+
+JWT_SECRET=cambiar_por_una_cadena_larga_y_aleatoria
+
+ADMIN_NOMBRE=Admin
+ADMIN_APELLIDO=Principal
+ADMIN_DNI=12345678
+ADMIN_FECHA_NACIMIENTO=1990-01-01
+ADMIN_TELEFONO=1112345678
+ADMIN_EMAIL=admin@ejemplo.com
+ADMIN_PASSWORD=CambiarEstaClave123
+
+SMTP_HOST=smtp.ejemplo.com
+SMTP_PORT=587
+SMTP_USER=usuario@ejemplo.com
+SMTP_PASSWORD=clave_smtp
+
+FRONTEND_URL=http://localhost:5173
+```
+
+El archivo `.env` no se sube a Git. No lo compartas.
+
+---
+
+## 3. Credenciales del administrador inicial
+
+El administrador inicial **se crea a partir de las variables `ADMIN_*` del `.env`**, ejecutando el comando de seed (paso 4).
+Con las variables del ejemplo, las credenciales de acceso serían:
+
+| Campo | Valor |
 |---|---|
-| En tu misma máquina, puerto 3000 | `http://localhost:3000` |
-| En otra máquina de la red | `http://192.168.1.50:3000` |
-| En un servidor con dominio | `https://api.midominio.com` |
+| Email | el valor de `ADMIN_EMAIL` |
+| Contraseña | el valor de `ADMIN_PASSWORD` |
+| Rol | `administrador` |
 
-Reglas:
+Notas:
 
-- Escribila **sin barra final** y **sin `/api`**. Correcto: `http://localhost:3000`. Incorrecto: `http://localhost:3000/api` o `http://localhost:3000/`.
-- Si no se define, el frontend usa `http://localhost:3000` por defecto.
-- Vite lee la variable **al iniciar o al compilar**. Si la cambiás, reiniciá `npm run dev` o volvé a construir la imagen.
-
-El backend también necesita conocer la URL del frontend en su variable `FRONTEND_URL`. Se usa para armar el enlace de recuperación de contraseña. Debe coincidir con la URL donde abras este frontend (por ejemplo `http://localhost:5173` en modo desarrollo).
+- **El seed no corre solo al levantar Docker ni al ejecutar `npm start`.** Tenés que ejecutarlo una vez (ver paso 4).
+- Se puede ejecutar más de una vez sin problema. Si ya existe una persona con ese DNI, un usuario con ese email o un administrador asociado, no los duplica.
+- Si el administrador ya existe, el seed **no cambia su contraseña** aunque modifiques `ADMIN_PASSWORD` en el `.env`.
+- Si falta `ADMIN_NOMBRE`, `ADMIN_APELLIDO`, `ADMIN_DNI`, `ADMIN_EMAIL` o `ADMIN_PASSWORD`, el seed falla con el mensaje `Faltan datos obligatorios del administrador en el .env`.
+- Cambiá la contraseña por una segura antes de usar el sistema fuera de un entorno de prueba.
 
 ---
 
 ## 4. Levantar el proyecto
 
-### Opción A: modo desarrollo
+### Opción A: con Docker (recomendada)
 
-**4.A.1. Instalar dependencias**
+`compose.yaml` levanta dos servicios: la API (`back_final_app`) y PostgreSQL 17 (`back_final_db`). Las tablas se crean solas desde `database/init.sql` la primera vez que se crea la base.
+
+**4.A.1. Construir y levantar**
+
+```bash
+docker compose up --build -d
+```
+
+**4.A.2. Verificar que arrancó**
+
+```bash
+docker compose ps
+docker compose logs -f backend
+```
+
+En los logs tiene que aparecer:
+
+```
+Conexión a PostgreSQL establecida
+La API está escuchando en el puerto: 3000
+```
+
+(Salí de los logs con `Ctrl + C`; los contenedores siguen corriendo.)
+
+**4.A.3. Crear el administrador inicial**
+
+```bash
+docker compose exec backend npm run seed
+```
+
+Tiene que terminar con `Seed ejecutado correctamente`.
+
+La API queda disponible en `http://localhost:3000` (o en el `PORT` que hayas definido).
+
+**Comandos útiles**
+
+```bash
+docker compose down        # detiene y elimina los contenedores (conserva los datos)
+docker compose down -v     # además BORRA la base de datos (volumen postgres_data)
+docker compose logs -f     # ver logs
+```
+
+Notas de Docker:
+
+- Los datos de la base se guardan en el volumen `postgres_data`. El script `init.sql` solo se ejecuta cuando ese volumen está vacío. Si cambiás `DB_NAME`, `DB_USER` o `DB_PASSWORD` después de la primera vez, ejecutá `docker compose down -v` para recrear la base.
+- PostgreSQL se publica en el puerto `5432` de tu máquina. Si ya lo tenés ocupado, agregá `DB_EXTERNAL_PORT=5433` (u otro puerto libre) al `.env`.
+- Si cambiás `PORT`, la API se publica en ese puerto de tu máquina.
+
+### Opción B: modo desarrollo (sin Docker para la API)
+
+**4.B.1. Instalar dependencias**
 
 ```bash
 npm install
 ```
 
-(El repositorio incluye un `.npmrc` con `legacy-peer-deps=true`; se aplica solo.)
+**4.B.2. Tener una base PostgreSQL con las tablas creadas**
 
-**4.A.2. Crear el archivo `.env`**
+La API no crea las tablas por sí misma. Elegí una de estas dos formas.
+
+*Forma 1: usar solo el servicio de base de datos de Docker (la más simple).*
 
 ```bash
-cp .env.example .env
+docker compose up -d db
 ```
 
-Editá `.env` y poné la URL de tu backend:
+Esto crea la base con `DB_NAME`, `DB_USER` y `DB_PASSWORD` del `.env` y carga `database/init.sql`. En el `.env` dejá `DB_HOST=localhost` y `DB_PORT=5432` (o el valor de `DB_EXTERNAL_PORT`, si lo definiste).
 
-```env
-VITE_API_URL=http://localhost:3000
+*Forma 2: usar un PostgreSQL propio.* Creá la base y cargá el esquema:
+
+```bash
+createdb -U <DB_USER> <DB_NAME>
+psql -U <DB_USER> -d <DB_NAME> -f database/init.sql
 ```
 
-**4.A.3. Iniciar el servidor de desarrollo**
+Después ajustá `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` y `DB_PASSWORD` en el `.env`.
+
+**4.B.3. Crear el administrador inicial**
+
+```bash
+npm run seed
+```
+
+**4.B.4. Iniciar la API en modo desarrollo**
 
 ```bash
 npm run dev
 ```
 
-Abrí en el navegador la dirección que muestra la consola, normalmente **http://localhost:5173**.
+Se reinicia sola al guardar cambios. En consola tiene que aparecer `La API está escuchando en el puerto: 3000`.
 
-### Opción B: con Docker
-
-El `Dockerfile` compila la aplicación (Node 22) y la sirve con Nginx en el puerto 80 del contenedor.
-
-**4.B.1. Construir la imagen**
+**Modo producción sin Docker (opcional)**
 
 ```bash
-docker build -t front-final-2026 .
+npm run build
+npm start
 ```
-
-**4.B.2. Ejecutar el contenedor**
-
-```bash
-docker run -d --name front_final_app -p 5173:80 front-final-2026
-```
-
-Abrí **http://localhost:5173** (podés cambiar `5173` por otro puerto libre de tu máquina).
-
-Para detenerlo y eliminarlo:
-
-```bash
-docker stop front_final_app && docker rm front_final_app
-```
-
-> **Limitación actual con Docker:** `VITE_API_URL` se incorpora a la aplicación en el momento de **compilar**, y el `Dockerfile` no recibe esa variable (además, `.dockerignore` excluye el `.env`). Por eso la imagen siempre apunta a `http://localhost:3000`.
-> Esto funciona si el backend corre en la misma máquina, en el puerto `3000`. Si el backend está en otra URL, usá la **Opción A** o pedí que se ajuste el `Dockerfile` para aceptar `VITE_API_URL` como argumento de build.
 
 ---
 
 ## 5. Probar que funciona
 
-1. Con el backend levantado, abrí el frontend en el navegador.
-2. Entrá a `/login`.
-3. Iniciá sesión con el **email y la contraseña del administrador inicial**, que se definen en `ADMIN_EMAIL` y `ADMIN_PASSWORD` del `.env` de `back-final-2026` (el administrador se crea con `npm run seed`; ver ese README).
+Iniciá sesión con el administrador creado en el paso 3 (cambiá email y contraseña por los de tu `.env`):
 
-Si el login responde con error de red, revisá el paso 6.
+```bash
+curl -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@ejemplo.com","password":"CambiarEstaClave123"}'
+```
+
+Si todo está bien, la respuesta incluye un token de sesión.
+
+Los endpoints cuelgan de `/api` (`/api/auth`, `/api/usuarios`, `/api/pacientes`, `/api/turnos`, etc.).
+
+La URL base del backend (`http://localhost:3000` o la que corresponda) es la que hay que configurar en `VITE_API_URL` del repositorio del frontend.
+
+---
 
 ## 6. Problemas frecuentes
 
 | Síntoma | Causa y solución |
 |---|---|
-| Error de red o `Network Error` al iniciar sesión | El backend no está levantado, o `VITE_API_URL` no apunta a él. Verificá la URL abriéndola en el navegador y reiniciá `npm run dev` tras cambiar el `.env`. |
-| Las peticiones van a `.../api/api/...` | `VITE_API_URL` termina en `/api`. Quitalo. |
-| Cambié `.env` y no se nota | Vite lee el `.env` al iniciar. Detené y volvé a ejecutar `npm run dev` (o reconstruí la imagen). |
-| El enlace de recuperación de contraseña del correo no abre esta aplicación | `FRONTEND_URL` del backend no coincide con la URL real del frontend. |
-| `401 Email o contraseña incorrectos` | El administrador no fue creado (falta `npm run seed` en el backend) o las credenciales no coinciden con `ADMIN_*`. |
-| Al recargar una ruta aparece 404 | En Docker, `nginx.conf` ya redirige todo a `index.html`. En otros hostings, configurá esa redirección (en Vercel ya está en `vercel.json`). |
-| `port is already allocated` | Usá otro puerto en `-p <puerto>:80`. |
+| `Faltan variables de configuración SMTP` al arrancar | Alguna variable `SMTP_*` está vacía. Completala (ver paso 2). |
+| `Faltan datos obligatorios del administrador en el .env` | Completá las variables `ADMIN_*` obligatorias y volvé a ejecutar el seed. |
+| `PostgreSQL todavía no está disponible. Intento n/10` y luego se detiene | La base no está levantada o `DB_HOST`/`DB_PORT`/credenciales son incorrectos. En modo desarrollo, `DB_HOST` debe ser `localhost`. |
+| `relation "personas" does not exist` | La base no tiene las tablas. Cargá `database/init.sql` (ver 4.B.2) o recreá el volumen con `docker compose down -v`. |
+| `port is already allocated` | El puerto `3000` o `5432` está ocupado. Cambiá `PORT` o `DB_EXTERNAL_PORT` en el `.env`. |
+| `401 Email o contraseña incorrectos` al iniciar sesión | No se ejecutó el seed, o el email/contraseña no coinciden con `ADMIN_EMAIL`/`ADMIN_PASSWORD`. |
+| Cambié `ADMIN_PASSWORD` y la contraseña vieja sigue funcionando | El seed no actualiza administradores existentes (ver paso 3). |
 
 ## 7. Otros comandos
 
 ```bash
-npm run build       # chequea tipos y genera la versión de producción en dist/
-npm run preview     # sirve dist/ localmente para probar la compilación
-npm run typecheck   # revisa los tipos con TypeScript
-npm run lint        # revisa el código con ESLint
+npm run lint    # revisa el código con ESLint
+npm run build   # compila TypeScript a dist/
 ```
